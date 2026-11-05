@@ -108,3 +108,7 @@ features are documented in the [original AeroTizen README](README-AeroTizen.md).
   their owners.
 
 MIT License. See [LICENSE](LICENSE).
+
+<!-- The contributor list from AeroTizen's tooling goes between these markers. -->
+<!-- contributors:start -->
+<!-- contributors:end -->
