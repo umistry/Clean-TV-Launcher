@@ -2,6 +2,7 @@ import type { BackgroundGraphics, BackgroundScene } from "../contracts/backgroun
 import { needsWebGL } from "../contracts/backgrounds";
 import { useStore } from "../shared/hooks/useStore";
 
+import { PhotoWallpaper } from "./PhotoWallpaper";
 import { blob } from "./scenes";
 import { WaveBackground } from "./WaveBackground";
 import { WebGLParticleCanvas } from "./WebGLParticleCanvas";
@@ -50,6 +51,8 @@ export const BackgroundSceneView = ({ scene, speed, webGL, reportWebGL }: Props)
           {scene.stars && <WebGLParticleCanvas kind="nebula" speed={speed} reportWebGL={reportWebGL} />}
         </>
       );
+    case "photos":
+      return <PhotoWallpaper />;
     case "waves":
       return <WaveBackground speed={speed} />;
     case "stars":

@@ -48,10 +48,15 @@ var WATCH_COVER_GRACE = 10000; // an app the launcher opened may take this long 
 var UNSEEN_SCAN = 5000; // same pace as the visible snapshot: other apps while one is unseen
 var BOOT_DELAY = 3000;
 var BOOT_FALLBACK = 15000; // launch anyway if the TV type is still unknown
+var WAKE_GAP = 20000; // the 300 ms tick stops while the TV sleeps, so a gap this long means it was off
+var POWER_POLL = 5000; // for firmware that keeps the service running in standby
+var LOCK_GAP = 8000; // the lock would rather ask once too often than miss a quick off and on
+var LOCK_GUARD_EVERY = 2000; // while locked, how soon the launcher is put back in front
 var started = false;
 var stopped = false;
 var server = null;
 var interval = null;
+var lockInterval = null;
 var capabilityRetry = null;
 var busy = false;
 var scanNumber = 0;
@@ -60,10 +65,18 @@ var bootUntil = 0;
 var bootDone = false;
 var bootFallback = null;
 var bootTimer = null;
+var lastBeat = 0;
+var lastPowerPoll = 0;
+var lastPower = null;
+var lastLockGuard = 0;
 var state = {
+  locked: false,
+  lockArmed: false,
   watched: null,
   seen: false,
   leaving: false,
+  wakes: 0,
+  lastWake: null,
   apps: [],
   running: {},
   selfVisible: null,
@@ -493,8 +506,137 @@ function launchSelf(why) {
   });
 }
 
+// Choosing Samsung Home pauses the watcher, but only until the TV is next turned on. Clearing the
+// pause hands back to the normal checks, which still stand aside for an app that's on screen.
+// Closes an app through the TV's own local API. Only ever called for one app the launcher names.
+function stopApp(id, done) {
+  var finished = false;
+  function finish(ok, status) {
+    if (!finished) {
+      finished = true;
+      record("stop", id + " " + status);
+      done({ ok: ok, status: status });
+    }
+  }
+  try {
+    var req = http.request(
+      {
+        host: "127.0.0.1",
+        port: 8001,
+        path: "/api/v2/applications/" + encodeURIComponent(id),
+        method: "DELETE",
+      },
+      function (res) {
+        res.on("data", function () {});
+        res.on("end", function () {
+          finish(res.statusCode >= 200 && res.statusCode < 300, res.statusCode);
+        });
+      },
+    );
+    req.setTimeout(3000, function () {
+      req.destroy();
+      finish(false, "timeout");
+    });
+    req.on("error", function () {
+      finish(false, "error");
+    });
+    req.end();
+  } catch (e) {
+    finish(false, "error");
+  }
+}
+function endLeaveAfterPowerCycle(reason) {
+  state.wakes += 1;
+  state.lastWake = reason;
+  record("wake", reason);
+  invalidate("TV turned on");
+  state.leaving = false;
+  resetTracking();
+  bootUntil = Date.now() + BOOT_DELAY;
+}
+function engageLock(reason) {
+  if (!state.locked) {
+    state.locked = true;
+    record("lock", reason);
+  }
+}
+function noticePowerCycle() {
+  var now = Date.now();
+  var gap = lastBeat > 0 ? now - lastBeat : 0;
+  lastBeat = now;
+  if (state.lockArmed && gap > LOCK_GAP) {
+    engageLock("service paused while the TV was off");
+  }
+  if (!state.leaving && !state.lockArmed) {
+    lastPower = null;
+    return;
+  }
+  if (state.leaving && gap > WAKE_GAP) {
+    endLeaveAfterPowerCycle("service paused while the TV was off");
+    return;
+  }
+  if (now - lastPowerPoll < POWER_POLL) {
+    return;
+  }
+  lastPowerPoll = now;
+  get("/api/v2/", function (info) {
+    var power = info && info.device && info.device.PowerState;
+    if ((!state.leaving && !state.lockArmed) || typeof power !== "string") {
+      return;
+    }
+    var wasOff = lastPower === "standby" || lastPower === "off";
+    lastPower = power;
+    if (wasOff && power === "on") {
+      if (state.lockArmed) {
+        engageLock("power state returned to on");
+      }
+      if (state.leaving) {
+        endLeaveAfterPowerCycle("power state returned to on");
+      }
+    }
+  });
+}
+// While the TV is locked, keep the launcher in front whichever way it was covered. It never launches anything
+// while the TV is off, because opening an app could turn the screen on.
+// The watcher's own tick stops under Native Home, so the lock keeps a separate, slower one.
+function lockTick() {
+  if (state.lockArmed && !watcherEnabled()) {
+    noticePowerCycle();
+  }
+  guardLock();
+}
+function guardLock() {
+  var now = Date.now();
+  if (!state.locked || now - lastLockGuard < LOCK_GUARD_EVERY) {
+    return;
+  }
+  lastLockGuard = now;
+  get("/api/v2/", function (info) {
+    var power = info && info.device && info.device.PowerState;
+    if (!state.locked || power !== "on") {
+      return;
+    }
+    appStatus(SELF, function (me) {
+      if (!state.locked || !me || me.visible) {
+        return;
+      }
+      state.lastLaunch = Date.now();
+      record("launch", "TV is locked");
+      try {
+        tizen.application.launch(SELF, null, function (e) {
+          state.last = "relaunch failed: " + (e && e.message);
+        });
+      } catch (e) {
+        state.last = "relaunch threw: " + e.message;
+      }
+    });
+  });
+}
 function tick() {
   state.heartbeats += 1;
+  if (watcherEnabled()) {
+    noticePowerCycle();
+  }
   if (!watcherEnabled() || state.leaving || busy || pending || Date.now() < bootUntil || !permitted()) {
     return;
   }
@@ -839,8 +981,37 @@ module.exports.onStart = function () {
       diagnosticRequest(req, res, url.pathname);
       return;
     }
+    if (url.pathname === "/stop") {
+      var stopId = String(query.id || "");
+      res.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      if (!/^[A-Za-z0-9._-]{1,120}$/.test(stopId) || stopId.indexOf("DclHome001") === 0) {
+        res.end(JSON.stringify({ ok: false, status: "refused" }));
+        return;
+      }
+      stopApp(stopId, function (result) {
+        res.end(JSON.stringify(result));
+      });
+      return;
+    }
     if (["/home", "/leave", "/watch"].indexOf(url.pathname) >= 0) {
       diagnostics.record("service.request", { action: url.pathname.slice(1) });
+    }
+    if (url.pathname === "/lock") {
+      // Timers stop while the TV is off, so check now: this request can arrive before the next tick.
+      noticePowerCycle();
+      if (query.arm === "1" || query.arm === "0") {
+        state.lockArmed = query.arm === "1";
+      }
+      if (query.on === "1") {
+        state.locked = true;
+        state.leaving = false;
+      } else if (query.on === "0") {
+        state.locked = false;
+      }
     }
     if (url.pathname === "/control/home") {
       controlHome(req, res);
@@ -885,6 +1056,7 @@ module.exports.onStart = function () {
     res.end(JSON.stringify(response));
   });
   server.listen(47790, "127.0.0.1");
+  lockInterval = setInterval(lockTick, 1000);
   require("./home-store")(typeof tizen !== "undefined" ? tizen : null, function (storage, failed) {
     if (stopped) {
       return;
@@ -901,6 +1073,7 @@ module.exports.onExit = function () {
   invalidate("service exit");
   scanNumber += 1;
   clearInterval(interval);
+  clearInterval(lockInterval);
   clearTimeout(capabilityRetry);
   clearTimeout(bootFallback);
   clearTimeout(bootTimer);

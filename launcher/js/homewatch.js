@@ -45,6 +45,13 @@
     x.send();
   }
 
+  // Tells the wallpaper to hand back the TV's video decoder before anything else needs it.
+  function announceHandoff() {
+    if (typeof CustomEvent === "function") {
+      document.dispatchEvent(new CustomEvent(cfg.HANDOFF_EVENT));
+    }
+  }
+
   function start() {
     if (!tz) {
       return;
@@ -66,8 +73,10 @@
 
   A.homewatch = {
     start: start,
+    announceHandoff: announceHandoff,
     // The launcher is about to open `appId`; Home inside it should come back here.
     watch: function (appId) {
+      announceHandoff();
       tell("/watch?id=" + encodeURIComponent(A.catalog.preloadedStoreId(appId) || appId));
     },
     // Every real app, so the service can tell a cast/launch from elsewhere apart from Home.
@@ -85,6 +94,7 @@
         return;
       }
       leaving = true;
+      announceHandoff();
       function failed() {
         leaving = false;
         A.toast(A.translate("handoff.homeTryAgain"));

@@ -39,6 +39,7 @@ function harness(mode = "deferred", saved = ["youtube.id"]) {
     inputs: { load() {} },
     settingsUi: { isOpen: () => false },
     homewatch: { start() {}, reportApps() {}, reportStartup() {} },
+    artwork: { learn() {} },
     homeScreen: {
       render() {
         calls.push("render");

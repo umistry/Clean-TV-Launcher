@@ -61,8 +61,10 @@ export interface LauncherConfig {
     timeFormat: TimeFormat | null;
   };
   FIREPLACE_ID: string;
+  HANDOFF_EVENT: string;
   KEY: Record<"LEFT" | "RIGHT" | "UP" | "DOWN" | "ENTER" | "BACK" | "ESC" | "IME_DONE" | "IME_CANCEL", number>;
   LONG_PRESS_MS: number;
+  SERVICE_URL: string;
   SPEED: { MIN: number; MAX: number; STEP: number };
 }
 export interface AppPresentation {
@@ -107,6 +109,7 @@ export interface HomeBridge {
   blur(): void;
   buildRows(): void;
   focus(): void;
+  holdsKeys(): boolean;
   keydown(code: number, event: Pick<KeyboardEvent, "preventDefault">): void;
   keyup(code: number): void;
   refreshApps(): void;

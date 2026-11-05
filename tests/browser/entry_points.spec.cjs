@@ -45,7 +45,7 @@ for (const [name, url] of [
       );
     });
     await page.goto(url);
-    await expect(page).toHaveTitle("AeroTizen");
+    await expect(page).toHaveTitle("TizenOS macOS Launcher");
     await expect(page.locator("#home-root #grid > .tile")).toHaveCount(2);
     await expect(page.locator("#home-root #grid > .tile").first()).toHaveClass(/focused/);
     await page.locator("#gear").click();

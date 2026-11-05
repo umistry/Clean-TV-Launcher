@@ -249,8 +249,16 @@
       }
       A.homewatch.suspendForExternal(function () {
         try {
+          // This TV can report an error for YouTube and open it anyway. Treating that as a failure hands the
+          // screen straight back to the launcher, so only a launcher still in front means it didn't open.
           tz.application.launch(app.id, accepted, function (error) {
-            youtubeFailed("launch denied", A.translate("handoff.launchDenied"), error);
+            window.setTimeout(function () {
+              if (document.hidden || !document.hasFocus()) {
+                accepted();
+                return;
+              }
+              youtubeFailed("launch denied", A.translate("handoff.launchDenied"), error);
+            }, cfg.EXTERNAL_OPEN_GRACE_MS);
           });
         } catch (error) {
           youtubeFailed("launch failed", A.translate("handoff.launchFailed"), error);

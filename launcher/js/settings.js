@@ -80,6 +80,11 @@
       for (var i = 0; !raw && i < cfg.LEGACY_STORAGE_KEYS.length; i++) {
         raw = localStorage.getItem(cfg.LEGACY_STORAGE_KEYS[i]);
       }
+      if (!raw && window.tizen) {
+        Object.keys(cfg.MACOS_FRESH_INSTALL).forEach(function (k) {
+          data[k] = cfg.MACOS_FRESH_INSTALL[k];
+        });
+      }
       var saved = raw ? JSON.parse(raw) : {};
       if (saved.favorites && !saved.home) {
         saved.home = saved.favorites;
@@ -92,6 +97,10 @@
     } catch (e) {
       /* corrupt or unavailable storage: keep defaults */
     }
+    // The time-of-day wallpaper was replaced by rotating photos.
+    if (data.background === "dynamic") {
+      data.background = "photos";
+    }
     data.language = typeof data.language === "string" && data.language ? data.language : "auto";
     data.numerals = data.numerals === "arab" ? "arab" : "latn";
     data.continueWatching = data.continueWatching === true;
@@ -101,6 +110,11 @@
             return typeof id === "string" && /^[A-Za-z0-9_.-]{1,200}$/.test(id) && all.indexOf(id) === index;
           })
           .slice(0, 100)
+      : [];
+    data.lockedApps = Array.isArray(data.lockedApps)
+      ? data.lockedApps.filter(function (id) {
+          return typeof id === "string";
+        })
       : [];
     var detectTimeFormat = data.timeFormat !== "12" && data.timeFormat !== "24";
     var detectTempUnit = data.tempUnit !== "C" && data.tempUnit !== "F";

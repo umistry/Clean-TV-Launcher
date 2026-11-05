@@ -98,6 +98,11 @@ export const SCENES: readonly BackgroundScene[] = [
     anim: "waves",
     base: "linear-gradient(180deg,#03101c 0%,#05243a 100%)",
   },
+  {
+    id: "photos",
+    anim: "photos",
+    base: "linear-gradient(170deg,#1c3a5e 0%,#3d6b7a 55%,#1b2a33 100%)",
+  },
   // static
   { id: "black", base: "#000" },
   {

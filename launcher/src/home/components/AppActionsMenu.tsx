@@ -1,11 +1,11 @@
-import { Move, SquareMinus, SquarePlus } from "lucide-preact";
+import { Lock, LockOpen, Move, SquareMinus, SquarePlus } from "lucide-preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 import { useStore } from "../../shared/hooks/useStore";
 import { useTranslation } from "../../shared/i18n/useTranslation";
 import { Icon } from "../../shared/icons/Icon";
 import type { HomeEnvironment } from "../types";
-const ACTION_ICONS = { add: SquarePlus, move: Move, remove: SquareMinus } as const;
+const ACTION_ICONS = { add: SquarePlus, lock: Lock, move: Move, remove: SquareMinus, unlock: LockOpen } as const;
 
 export const AppActionsMenu = ({ env }: { env: HomeEnvironment }) => {
   const { t } = useTranslation();

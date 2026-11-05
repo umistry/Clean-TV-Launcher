@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/helalaou/AeroTizen/launcher" version="2.6.0" viewmodes="maximized">
-  <name>AeroTizen</name>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/helalaou/AeroTizen/launcher" version="2.7.0" viewmodes="maximized">
+  <name>TizenOS macOS Launcher</name>
   <icon src="icon.png"/>
   <content src="index.html"/>
   <tizen:app-control>

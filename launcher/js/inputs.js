@@ -179,6 +179,9 @@
     if (!tz || !tz.tvwindow) {
       return A.toast(A.translate("inputs.wouldSwitch", { input: displayLabel(s) }));
     }
+    if (A.homewatch.announceHandoff) {
+      A.homewatch.announceHandoff();
+    }
     try {
       tz.tvwindow.setSource(
         s.raw || s,

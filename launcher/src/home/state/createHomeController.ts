@@ -1,8 +1,11 @@
 import { focusControl } from "../../shared/navigation/focusControl";
 import { createStore } from "../../shared/state/createStore";
+import { MOODS, REPLY_KEYS } from "../macos/conversation";
+import { DOCK_ADD_KEY, inputKey, LAUNCHPAD_KEY, LOCK_KEY, STORE_KEY, TASKS_KEY } from "../macos/dockKeys";
 import type { HomeEnvironment, HomeMenuChoice, HomeState, Page } from "../types";
 
 const HEADER_KEYS = ["gear", "samsung-home-shortcut", "home-tab", "apps-tab"] as const;
+const MENU_BAR_KEYS = ["home-tab", "apps-tab", STORE_KEY, TASKS_KEY, LOCK_KEY, "gear"] as const;
 const TOP_SCROLL_CLEARANCE = 128;
 const APPS_END_CLEARANCE = 16;
 const HOME_MENU_CHOICES = [
@@ -12,12 +15,13 @@ const HOME_MENU_CHOICES = [
 const APP_MENU_CHOICES = {
   add: { action: "add", label: "home.addToHome" },
   remove: { action: "remove", label: "home.removeFromHome" },
+  lock: { action: "lock", label: "home.lockApp" },
+  unlock: { action: "unlock", label: "home.unlockApp" },
 } as const;
 
 type Rows = readonly (readonly string[])[];
 
-const getSelectedKey = (rows: Rows, selected: string, started: boolean) => {
-  const first = rows[1]?.[0];
+const getSelectedKey = (rows: Rows, selected: string, started: boolean, first: string | undefined) => {
   if (!started && first) {
     return first;
   }
@@ -79,6 +83,10 @@ const getVerticalColumn = ({
   if (target === 0) {
     return rows[0].indexOf(page === "home" ? "home-tab" : "apps-tab");
   }
+  // Moving up to the greeting's replies always starts on the first one.
+  if (rows[target][0]?.startsWith("reply:")) {
+    return 0;
+  }
   const column = row === 0 ? 0 : rows[row].indexOf(selected);
   if (!selected.startsWith("continue:") && !rows[target][0]?.startsWith("continue:")) {
     return column;
@@ -110,11 +118,11 @@ const getVerticalColumn = ({
 export const createHomeController = (
   env: Omit<
     HomeEnvironment,
-    "bridge" | "state" | "select" | "activate" | "showPage" | "choose" | "dismiss" | "menuChoices"
+    "bridge" | "state" | "select" | "activate" | "showPage" | "choose" | "closeTasks" | "dismiss" | "menuChoices"
   >,
   transaction: (action: () => void) => void,
 ) => {
-  const { runtime, settings, inventory, nodes } = env;
+  const { locks, moments, stats, runtime, settings, inventory, nodes } = env;
   const state = createStore<HomeState>({
     page: "home",
     appsEndOffset: 0,
@@ -125,6 +133,8 @@ export const createHomeController = (
     moving: null,
     draft: null,
     menu: null,
+    editingDock: false,
+    taskPanel: null,
   });
   let timer: number | undefined;
   let enterDown = false;
@@ -154,22 +164,42 @@ export const createHomeController = (
   };
   const ids = () =>
     state.getSnapshot().page === "home" ? homeIds() : inventory.getSnapshot().apps.map((app) => app.id);
-  const sourceKey = (source: { type: string; number?: number }) => "input:" + source.type + ":" + source.number;
+  const sourceKey = inputKey;
+  const onDock = () => settings.getSnapshot().macosLook && state.getSnapshot().page === "home";
+  // The reply buttons show while the greeting is still asking its question.
+  const asking = () => {
+    const { answer, back } = moments.conversation.getSnapshot();
+    return onDock() && settings.getSnapshot().greetingEnabled && !answer && !back;
+  };
   const rows = (): readonly (readonly string[])[] => {
     const columns = env.columns(settings.getSnapshot());
     const all = ids();
     const appRows = Array.from({ length: Math.ceil(all.length / columns) }, (_, index) =>
       all.slice(index * columns, (index + 1) * columns).map((id) => "app:" + id),
     );
-    const appLayout = [HEADER_KEYS, ...appRows];
+    const header = settings.getSnapshot().macosLook ? MENU_BAR_KEYS : HEADER_KEYS;
+    const appLayout = [header, ...appRows];
     if (state.getSnapshot().page !== "home") {
       return all.length ? [...appLayout, ["back-to-top"]] : appLayout;
     }
     const { items, inputs } = inventory.getSnapshot();
     const continueRows =
       settings.getSnapshot().continueWatching && items.length ? [items.map((item) => "continue:" + item.key)] : [];
+    if (onDock()) {
+      // Apps and inputs share the Dock, the last row on the desktop. The space above it stays empty.
+      const dock = [LAUNCHPAD_KEY, ...all.map((id) => "app:" + id), DOCK_ADD_KEY, ...inputs.map(sourceKey)];
+      return asking() ? [header, REPLY_KEYS, dock] : [header, dock];
+    }
     const inputRows = inputs.length ? [inputs.map(sourceKey)] : [];
     return [...appLayout, ...continueRows, ...inputRows];
+  };
+  // The Dock opens on its first app, not on the Launchpad button beside it.
+  const firstKey = (list: Rows) => {
+    if (!onDock()) {
+      return list[1]?.[0];
+    }
+    const dock = list[list.length - 1];
+    return dock[1] || dock[0];
   };
   const focus = () => {
     if (document.hidden || runtime.settingsUi?.isOpen()) {
@@ -188,7 +218,7 @@ export const createHomeController = (
     }
     const list = rows();
     const old = state.getSnapshot().selected;
-    const selected = getSelectedKey(list, old, started);
+    const selected = getSelectedKey(list, old, started, firstKey(list));
     if (list[1]?.length) {
       started = true;
     }
@@ -213,6 +243,11 @@ export const createHomeController = (
         );
         update({ continueOffset: offset });
       }
+    }
+    // The desktop never scrolls: the Dock and clock have fixed places.
+    if (onDock()) {
+      update({ appsEndOffset: 0, scroll: 0 });
+      return;
     }
     const mainTop = main.getBoundingClientRect().top;
     const lastAppRow = pending.page === "apps" ? list[list.length - 2] : undefined;
@@ -256,16 +291,57 @@ export const createHomeController = (
     update({ menu: null });
     focus();
   };
-  const showPage = (page: Page) => {
+  // The macOS layout lands on content, so the remote is ready to pick an app straight away.
+  const pageLandingKey = (page: Page) => {
+    if (!settings.getSnapshot().macosLook) {
+      return page === "home" ? "home-tab" : "apps-tab";
+    }
+    if (page === "home") {
+      return LAUNCHPAD_KEY;
+    }
+    const first = inventory.getSnapshot().apps[0];
+    return first ? "app:" + first.id : "apps-tab";
+  };
+  const showPage = (page: Page, editingDock = false) => {
     cancelPress();
     endMove();
-    update({ page, appsEndOffset: 0, scroll: 0, menu: null, selected: page === "home" ? "home-tab" : "apps-tab" });
+    const wasEditing = state.getSnapshot().editingDock;
+    update({
+      page,
+      appsEndOffset: 0,
+      scroll: 0,
+      menu: null,
+      editingDock,
+      selected: wasEditing && page === "home" ? DOCK_ADD_KEY : pageLandingKey(page),
+    });
+    focus();
+  };
+  const toggleInDock = (id: string) => {
+    const home = settings.getSnapshot().home;
+    settings.update({ home: home.includes(id) ? home.filter((item) => item !== id) : [...home, id] });
+  };
+  const closeTasks = () => {
+    update({ taskPanel: null });
     focus();
   };
   const activate = (key: string) => {
-    if (key === "gear") {
+    const mood = MOODS.find(({ key: replyKey }) => replyKey === key);
+    if (mood) {
+      moments.reply(mood.mood);
+    } else if (key === LAUNCHPAD_KEY) {
+      showPage("apps");
+    } else if (key === DOCK_ADD_KEY) {
+      showPage("apps", true);
+    } else if (key === TASKS_KEY) {
+      stats.refresh();
+      update({ taskPanel: 0 });
+    } else if (key === STORE_KEY) {
+      runtime.apps.openStore();
+    } else if (key === LOCK_KEY) {
+      locks.openMenu();
+    } else if (key === "gear") {
       endMove();
-      runtime.settingsUi?.open();
+      locks.openSettings(() => runtime.settingsUi?.open());
     } else if (key === "samsung-home-shortcut") {
       if (runtime.homewatch.openSamsungHome) {
         runtime.homewatch.openSamsungHome();
@@ -282,10 +358,16 @@ export const createHomeController = (
     } else if (key.startsWith("app:")) {
       const id = key.slice(4);
       const app = runtime.apps.byId(id);
-      if (id === runtime.config.FIREPLACE_ID) {
+      if (state.getSnapshot().editingDock) {
+        toggleInDock(id);
+      } else if (id === runtime.config.FIREPLACE_ID) {
         runtime.apps.playFireplace();
       } else if (app) {
-        runtime.apps.launch(app);
+        const { title } = runtime.tiles.describe(app);
+        locks.openApp(id, title, () => {
+          moments.opened(title);
+          runtime.apps.launch(app);
+        });
       }
     } else if (key.startsWith("continue:")) {
       // Commands need the service's live record, not an immutable view snapshot.
@@ -300,12 +382,18 @@ export const createHomeController = (
       }
     }
   };
-  const menuChoices = (): readonly HomeMenuChoice[] => {
-    if (state.getSnapshot().page === "home") {
-      return HOME_MENU_CHOICES;
+  const lockChoices = (id: string): readonly HomeMenuChoice[] => {
+    if (id === runtime.config.FIREPLACE_ID) {
+      return [];
     }
-    const selected = homeIds().includes(state.getSnapshot().menu?.id || "");
-    return [selected ? APP_MENU_CHOICES.remove : APP_MENU_CHOICES.add];
+    return [locks.isLocked(id) ? APP_MENU_CHOICES.unlock : APP_MENU_CHOICES.lock];
+  };
+  const menuChoices = (): readonly HomeMenuChoice[] => {
+    const id = state.getSnapshot().menu?.id || "";
+    if (state.getSnapshot().page === "home") {
+      return [...HOME_MENU_CHOICES, ...lockChoices(id)];
+    }
+    return [homeIds().includes(id) ? APP_MENU_CHOICES.remove : APP_MENU_CHOICES.add, ...lockChoices(id)];
   };
   const choose = (index: number) => {
     const menu = state.getSnapshot().menu;
@@ -317,6 +405,12 @@ export const createHomeController = (
     if (choice.action === "move") {
       update({ moving: menu.id, draft: [...homeIds()] });
       env.showMoveInstructions();
+      return;
+    }
+    if (choice.action === "lock" || choice.action === "unlock") {
+      const app = runtime.apps.byId(menu.id);
+      locks.toggleApp(menu.id, app ? runtime.tiles.describe(app).title : menu.id);
+      focus();
       return;
     }
     const before = ids();
@@ -337,6 +431,9 @@ export const createHomeController = (
   const K = runtime.config.KEY;
   const keydown = (code: number, event: Pick<KeyboardEvent, "preventDefault">) =>
     transaction(() => {
+      if (locks.keydown(code, event)) {
+        return;
+      }
       const current = state.getSnapshot();
       // Rows run right to left in RTL languages, so Left moves to the next item there.
       const rtl = window.document?.documentElement.dir === "rtl";
@@ -345,6 +442,21 @@ export const createHomeController = (
         return;
       }
       event.preventDefault();
+      if (current.taskPanel !== null) {
+        const tasks = stats.tasks.getSnapshot();
+        if (code === K.BACK || code === K.ESC) {
+          closeTasks();
+        } else if (code === K.ENTER) {
+          const task = tasks[Math.min(current.taskPanel, tasks.length - 1)];
+          if (task && !enterDown) {
+            enterDown = true;
+            void stats.stop(task);
+          }
+        } else if (code === K.UP || code === K.DOWN) {
+          update({ taskPanel: Math.max(0, Math.min(tasks.length - 1, current.taskPanel + delta)) });
+        }
+        return;
+      }
       if (current.menu) {
         if (code === K.BACK || code === K.ESC) {
           dismiss();
@@ -373,7 +485,8 @@ export const createHomeController = (
         }
         const home = [...homeIds()];
         const from = home.indexOf(current.moving);
-        const step = code === K.UP || code === K.DOWN ? env.columns(settings.getSnapshot()) : 1;
+        const rowStep = onDock() ? 0 : env.columns(settings.getSnapshot());
+        const step = code === K.UP || code === K.DOWN ? rowStep : 1;
         const to = Math.max(0, Math.min(home.length - 1, from + delta * step));
         update({ draft: moveItem(home, from, to, current.moving) });
         focus();
@@ -424,6 +537,7 @@ export const createHomeController = (
       select(all[target][Math.max(0, Math.min(all[target].length - 1, column))]);
     });
   const keyup = (code: number) => {
+    locks.keyup(code);
     if (code !== K.ENTER) {
       return;
     }
@@ -433,10 +547,16 @@ export const createHomeController = (
     }
     window.clearTimeout(timer);
     timer = undefined;
-    if (!state.getSnapshot().menu && !state.getSnapshot().moving) {
+    if (!state.getSnapshot().menu && !state.getSnapshot().moving && state.getSnapshot().taskPanel === null) {
       activate(state.getSnapshot().selected);
     }
   };
+  // The reply buttons come and go with the conversation, and focus falls back to the Dock when they do.
+  moments.conversation.subscribe(() => {
+    if (onDock()) {
+      focus();
+    }
+  });
   const bridge = {
     render: focus,
     buildRows: focus,
@@ -448,6 +568,7 @@ export const createHomeController = (
     },
     keydown,
     keyup,
+    holdsKeys: locks.holdsKeys,
   };
-  return { ...env, state, bridge, select, activate, showPage, choose, dismiss, menuChoices };
+  return { ...env, state, bridge, select, activate, showPage, choose, dismiss, menuChoices, closeTasks };
 };

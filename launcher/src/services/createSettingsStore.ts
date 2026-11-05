@@ -23,6 +23,7 @@ export const createSettingsStore = (source: SettingsSource, defaults: SettingsVa
     );
     const home = values.home || [];
     const continueApps = values.continueWatchingApps || [];
+    const lockedApps = values.lockedApps || [];
     const inputNames = values.inputNames || {};
     const hdmiKeepVisible = values.hdmiKeepVisible || {};
     const weatherLocation = values.weatherLocation;
@@ -37,6 +38,8 @@ export const createSettingsStore = (source: SettingsSource, defaults: SettingsVa
         previous && equalRecord(previous.continueWatchingApps, continueApps)
           ? previous.continueWatchingApps
           : Object.freeze([...continueApps]),
+      lockedApps:
+        previous && equalRecord(previous.lockedApps, lockedApps) ? previous.lockedApps : Object.freeze([...lockedApps]),
       home: previous && equalRecord(previous.home, home) ? previous.home : Object.freeze([...home]),
       inputNames:
         previous && equalRecord(previous.inputNames, inputNames)

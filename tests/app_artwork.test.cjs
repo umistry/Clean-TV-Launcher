@@ -236,3 +236,86 @@ test("app artwork and unknown icons cannot hold the initial page load", () => {
   assert.equal(images[0].src, "/icon.png");
   assert.equal(images[1].src, "/opt/share/webappservice/apps_icon/all/123456/304x304.png");
 });
+
+function learningRuntime({ folders, names, saved = {} }) {
+  const storage = new Map([["aerotizen.artwork.storeIds.v1", JSON.stringify(saved)]]);
+  const requested = [];
+  class XMLHttpRequest {
+    open(method, url) {
+      this.url = url;
+    }
+    send() {
+      requested.push(this.url);
+      const id = this.url.split("/").pop();
+      if (names[id]) {
+        this.responseText = JSON.stringify({ id, name: names[id] });
+        this.onload();
+      } else {
+        this.onerror();
+      }
+    }
+  }
+  const A = {
+    tizen: { filesystem: { listDirectory: (dir, success) => success(folders) } },
+  };
+  const context = vm.createContext({
+    window: {
+      AeroTizen: A,
+      localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    },
+    AeroTizen: A,
+    XMLHttpRequest,
+  });
+  for (const file of ["config.js", "app-catalog.js", "app-lookup.js", "artwork.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(root, "js", file), "utf8"), context);
+  }
+  return { A, requested, storage };
+}
+
+test("JioHotstar, SonyLIV and ZEE5 use Samsung's cached artwork", () => {
+  const { A } = learningRuntime({ folders: [], names: {} });
+  for (const [id, store] of [
+    ["fiZNCxMH9Y.Hotstar", "3201711015117"],
+    ["EUKHUxrGQA.SonyLIV", "3201709014748"],
+    ["wKDM33Rods.ZEE5", "3201810017104"],
+  ]) {
+    assert.equal(
+      A.artwork.sources({ id, name: "Any name" })[0],
+      "/opt/share/webappservice/apps_icon/all/" + store + "/304x304.png",
+    );
+  }
+});
+
+test("an app the catalogue doesn't know learns its artwork from the TV's own app list", () => {
+  const app = { id: "NewApp0001.Main", name: "Zee 5 Kids - Cartoons" };
+  const { A, requested, storage } = learningRuntime({
+    folders: ["3201907018807", "9990000000001", "9990000000002", "not-a-store-id"],
+    names: { 9990000000001: "Privacy Choices", 9990000000002: "ZEE5 Kids" },
+  });
+  assert.deepEqual(Array.from(A.artwork.sources(app)), []);
+  let learned = 0;
+  A.artwork.learn([app, { id: "org.tizen.netflix-app", name: "Netflix" }], () => (learned += 1));
+  assert.equal(learned, 1);
+  assert.deepEqual(
+    requested.map((url) => url.split("/").pop()),
+    ["9990000000001", "9990000000002"],
+    "folders already claimed by a known app are skipped",
+  );
+  assert.equal(A.artwork.sources(app)[0], "/opt/share/webappservice/apps_icon/all/9990000000002/304x304.png");
+  assert.equal(JSON.parse(storage.get("aerotizen.artwork.storeIds.v1"))[app.id], "9990000000002");
+  A.artwork.learn([app], () => (learned += 1));
+  assert.equal(learned, 1, "nothing is asked again once every app has artwork");
+});
+
+test("learned artwork survives a restart, and nothing is asked when every app is known", () => {
+  const app = { id: "NewApp0001.Main", name: "New App" };
+  const { A, requested } = learningRuntime({
+    folders: ["9990000000003"],
+    names: {},
+    saved: { [app.id]: "9990000000003", "bad.app": "../../etc" },
+  });
+  assert.equal(A.artwork.sources(app)[0], "/opt/share/webappservice/apps_icon/all/9990000000003/304x304.png");
+  assert.deepEqual(Array.from(A.artwork.sources({ id: "bad.app", name: "Bad" })), []);
+  A.artwork.learn([app], () => assert.fail("nothing to learn"));
+  assert.equal(requested.length, 0);
+});

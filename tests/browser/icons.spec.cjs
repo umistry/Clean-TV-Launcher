@@ -46,7 +46,7 @@ for (const glass of [false, true]) {
       };
     }, glass);
     await page.goto("/");
-    await expect(page).toHaveTitle("AeroTizen");
+    await expect(page).toHaveTitle("TizenOS macOS Launcher");
     await page.waitForFunction(() => AeroTizen.apps.ready);
     const gear = page.getByRole("button", { name: "Settings", exact: true });
     await expect(gear.locator("svg")).toHaveAttribute("aria-hidden", "true");

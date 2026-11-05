@@ -8,6 +8,10 @@
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode,
       active = document.activeElement;
+    // A passcode prompt outranks every other layer.
+    if (A.homeScreen.holdsKeys && A.homeScreen.holdsKeys()) {
+      return A.homeScreen.keydown(k, e);
+    }
     // Text entry: the on-screen keyboard owns the keys; OK/Done/Back finish.
     if (active && active.tagName === "INPUT") {
       if (k === KEY.ENTER || k === KEY.BACK || k === KEY.ESC || k === KEY.IME_DONE || k === KEY.IME_CANCEL) {
@@ -42,6 +46,9 @@
   });
 
   document.addEventListener("keyup", function (e) {
+    if (A.homeScreen.holdsKeys && A.homeScreen.holdsKeys()) {
+      return A.homeScreen.keyup(e.keyCode);
+    }
     if (A.settingsUi.isOpen() || A.inputs.watching || window.Fireplace.isOpen()) {
       return;
     }
@@ -92,6 +99,10 @@
     }
     var nextIds = A.apps.realIds.slice().sort().join(",");
     if (nextIds !== appIds) {
+      // New artwork arrives with fresh app records, so reload the list if any was found.
+      A.artwork.learn(A.apps.all, function () {
+        A.apps.load();
+      });
       appIds = nextIds;
       clearTimeout(reportAppsTimer);
       reportAppsTimer = setTimeout(function () {

@@ -50,11 +50,11 @@ const findUntranslated = (page) =>
         const languageOption = element.closest('[data-key^="language:"]');
         const languageCode = languageOption?.getAttribute("data-key").slice("language:".length);
         if (
-          (text === "AEROTIZEN" && element.matches(".settings-drawer__kicker")) ||
+          (text === "TIZENOS MACOS LAUNCHER" && element.matches(".settings-drawer__kicker")) ||
           (languageCode && text === languageNames[languageCode]) ||
           (text === releaseNote && element.matches(".about-release-notes li")) ||
-          (text === "aerotizen update launcher" && element.matches(".about-update-command code")) ||
-          (text === "github.com/helalaou/AeroTizen" && element.matches(".about-facts code")) ||
+          (text === "aerotizen install ./tizenos-macos-launcher" && element.matches(".about-update-command code")) ||
+          (text === "github.com/umistry/Clean-TV-Launcher" && element.matches(".about-facts code")) ||
           (dates.includes(text) && element.closest('#date, #date-formats [data-key]:not([data-key="date:none"])'))
         ) {
           return;
@@ -113,7 +113,7 @@ test("the production HTML shell contains no untranslated launcher copy", async (
     { html: await response.text(), textAttributes },
   );
   // The product name is the only intentional text in the HTML shell.
-  expect(rawCopy).toEqual({ title: "AeroTizen", body: "", attributes: [] });
+  expect(rawCopy).toEqual({ title: "TizenOS macOS Launcher", body: "", attributes: [] });
 });
 
 for (const glassSettings of [false, true]) {
@@ -125,7 +125,7 @@ for (const glassSettings of [false, true]) {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.clock.setFixedTime(new Date("2026-06-10T13:05:00Z"));
     await page.route("https://**/*", (route) => route.fulfill({ json: {} }));
-    await page.route("https://api.github.com/repos/helalaou/AeroTizen/releases?*", (route) =>
+    await page.route("https://api.github.com/repos/umistry/Clean-TV-Launcher/releases?*", (route) =>
       route.fulfill({
         json: [{ tag_name: "launcher-v" + releaseVersion, draft: false, prerelease: false, body: "* " + releaseNote }],
       }),

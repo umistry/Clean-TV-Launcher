@@ -28,6 +28,7 @@ export interface LauncherRuntime {
     playFireplace(): void;
     subscribe(listener: () => void): () => void;
   };
+  catalog?: { preloadedStoreId(appId: string): string | null };
   clearFocus(): void;
   clock: ClockService;
   config: LauncherConfig;
@@ -49,6 +50,7 @@ export interface LauncherRuntime {
     hasRecognizedDevice?(source: InputSource): boolean;
     isVisible(source: InputSource): boolean;
     label(source: InputSource, defaultLabel?: string): string;
+    leave?(): void;
     portName(source: InputSource): string;
     refresh(): void;
     show(source: InputSource): void;

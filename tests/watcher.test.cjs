@@ -101,7 +101,21 @@ function harness(options = {}) {
     res.emit("end");
     item.replied = true;
   }
+  const deletes = [];
   const http = {
+    request(options, callback) {
+      const req = new EventEmitter();
+      req.setTimeout = () => undefined;
+      req.destroy = () => undefined;
+      req.end = () => {
+        deletes.push(options);
+        const res = new EventEmitter();
+        res.statusCode = options.path.includes("missing") ? 404 : 200;
+        callback(res);
+        res.emit("end");
+      };
+      return req;
+    },
     get(options, callback) {
       const req = new EventEmitter();
       const item = { options, callback, req, replied: false };
@@ -214,6 +228,7 @@ function harness(options = {}) {
     });
   }
   return {
+    deletes,
     api: context.module.exports,
     art,
     artReplies,
@@ -255,6 +270,11 @@ function harness(options = {}) {
     setPowerState(value) {
       powerState = value;
     },
+    // The TV sleeping: no timer fires, and they all resume later on a clock that has jumped forward.
+    sleep(ms) {
+      clock += ms;
+      for (const entry of timers.values()) entry.at += ms;
+    },
     now: () => clock,
   };
 }
@@ -293,6 +313,82 @@ test("Home reclaim requires hidden debounce, two fresh off replies and app reche
   assert.equal(h.launches.length, 1);
   assert.equal(h.launches[0].id, SELF);
   assert.equal(h.state().guard.launchCalls, 1);
+});
+
+test("turning the TV off and on ends a Samsung Home visit when the service was paused", () => {
+  const h = ready({ capability: false });
+  h.advance(5000);
+  h.control("/home");
+  const before = h.launches.length;
+  h.control("/leave");
+  h.advance(60000);
+  assert.equal(h.launches.length, before, "Samsung Home stays while the TV stays on");
+  assert.equal(h.state().leaving, true);
+  h.sleep(120000);
+  h.statuses.set(SELF, { running: true, visible: false });
+  h.advance(8000);
+  assert.equal(h.state().leaving, false);
+  assert.equal(h.state().wakes, 1);
+  assert.equal(h.launches.length, before + 1, "the launcher comes back at power-on");
+});
+
+test("standby seen through the TV's power state also ends a Samsung Home visit", () => {
+  const h = ready({ capability: false });
+  h.advance(5000);
+  h.control("/home");
+  const before = h.launches.length;
+  h.control("/leave");
+  h.setPowerState("standby");
+  h.advance(11000);
+  assert.equal(h.state().leaving, true, "nothing reopens while the TV is off");
+  assert.equal(h.launches.length, before);
+  h.setPowerState("on");
+  h.statuses.set(SELF, { running: true, visible: false });
+  h.advance(14000);
+  assert.equal(h.state().leaving, false);
+  assert.equal(h.launches.length, before + 1);
+});
+
+test("a brief service stall doesn't end a Samsung Home visit", () => {
+  const h = ready({ capability: false });
+  h.advance(5000);
+  h.control("/leave");
+  h.sleep(5000);
+  h.advance(5000);
+  assert.equal(h.state().leaving, true);
+  assert.equal(h.state().wakes, 0);
+});
+
+test("after a power cycle the watcher still stands aside for an app on screen", () => {
+  const h = ready({ capability: false });
+  h.advance(5000);
+  h.control("/apps?ids=AppB");
+  h.control("/leave");
+  const before = h.launches.length;
+  h.sleep(120000);
+  h.statuses.set(SELF, { running: true, visible: false });
+  h.statuses.set("AppB", { running: true, visible: true });
+  h.advance(12000);
+  assert.equal(h.state().leaving, false);
+  assert.equal(h.launches.length, before, "the app on screen isn't interrupted");
+});
+
+test("force stop asks the TV's local API to close only the named app", () => {
+  const h = ready({ capability: false });
+  assert.deepEqual({ ...h.control("/stop?id=3201907018807") }, { ok: true, status: 200 });
+  assert.equal(h.deletes.length, 1);
+  assert.equal(h.deletes[0].method, "DELETE");
+  assert.equal(h.deletes[0].host, "127.0.0.1");
+  assert.equal(h.deletes[0].path, "/api/v2/applications/3201907018807");
+  assert.equal(h.control("/stop?id=missing").ok, false);
+});
+
+test("force stop refuses the launcher itself and malformed names", () => {
+  const h = ready({ capability: false });
+  for (const id of ["DclHome001.Home", "../../etc", "a b", ""]) {
+    assert.equal(h.control("/stop?id=" + encodeURIComponent(id)).ok, false, id);
+  }
+  assert.equal(h.deletes.length, 0);
 });
 
 test("Art on and unknown prevent startup and normal reclaim", () => {
@@ -981,3 +1077,58 @@ for (const [name, fn] of tests) {
 }
 console.log(`${tests.length - failed}/${tests.length} watcher integration tests passed`);
 if (failed) process.exitCode = 1;
+
+test("the TV lock engages after the TV has been off, and only once it's armed", () => {
+  const h = ready({ capability: false });
+  h.advance(1000);
+  h.sleep(120000);
+  h.advance(1000);
+  assert.equal(h.state().locked, false);
+  assert.equal(h.control("/lock?arm=1").lockArmed, true);
+  h.advance(30000);
+  assert.equal(h.state().locked, false, "ordinary use never locks");
+  h.sleep(120000);
+  assert.equal(h.control("/lock?arm=1").locked, true, "the launcher's request can notice the gap before any tick");
+});
+
+test("the TV lock also notices the power state on firmware that keeps the service running", () => {
+  const h = ready({ capability: false });
+  h.control("/lock?arm=1");
+  h.setPowerState("standby");
+  h.advance(6000);
+  assert.equal(h.state().locked, false);
+  h.setPowerState("on");
+  h.advance(6000);
+  assert.equal(h.state().locked, true);
+});
+
+test("under Native Home a locked TV takes the screen back, but never while the TV is off", () => {
+  const h = ready({ capability: false });
+  assert.equal(h.handoff("native").code, 200);
+  h.control("/lock?arm=1&on=1");
+  h.statuses.set(SELF, { running: true, visible: false });
+  h.setPowerState("standby");
+  h.advance(10000);
+  assert.equal(h.launches.length, 0);
+  h.setPowerState("on");
+  h.advance(3000);
+  assert.deepEqual(
+    h.launches.map(({ id }) => id),
+    [SELF],
+  );
+  assert.equal(h.state().locked, true);
+  h.control("/lock?on=0");
+  h.statuses.set(SELF, { running: true, visible: false });
+  h.advance(10000);
+  assert.equal(h.launches.length, 1, "unlocking stops the guard");
+});
+
+test("under Native Home the TV lock still notices a power cycle", () => {
+  const h = ready({ capability: false });
+  h.handoff("native");
+  h.control("/lock?arm=1");
+  h.advance(3000);
+  h.sleep(60000);
+  h.advance(1500);
+  assert.equal(h.state().locked, true);
+});

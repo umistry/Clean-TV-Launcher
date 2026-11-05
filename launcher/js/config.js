@@ -5,6 +5,8 @@ AeroTizen.config = {
   APP_ID: "DclHome001.Home",
   SERVICE_ID: "DclHome001.Watcher",
   SERVICE_URL: "http://127.0.0.1:47790",
+  // The TV's own local API, which names the app behind each store ID.
+  TV_API_URL: "http://127.0.0.1:8001",
 
   STORAGE_KEY: "aerotizen.settings.v1",
   LEGACY_STORAGE_KEYS: ["hearth.home.v1", "declutter.home.v5"],
@@ -40,12 +42,19 @@ AeroTizen.config = {
 
   CARD_COLUMNS: { big: 3, small: 5 }, // Settings → App cards
   LONG_PRESS_MS: 600,
+  // How long an app that reported an error gets to take the screen before we believe the error.
+  EXTERNAL_OPEN_GRACE_MS: 4000,
+  // Sent on `document` just before the launcher gives the screen to an app or input.
+  HANDOFF_EVENT: "aerotizen:handoff",
   SPEED: { MIN: 0.25, MAX: 3, STEP: 0.25 },
 
   DEFAULTS: {
     home: null, // null selects defaults on first launch; [] keeps an empty Home.
     cardSize: "big",
     glassSettings: false, // Optional Preact Glass categories and source dock.
+    macosLook: false, // Menu bar, Dock and Launchpad. Fresh TV installs get MACOS_FRESH_INSTALL.
+    greetingEnabled: true,
+    greetingName: "",
     homeCardMode: "square", // Square Samsung artwork remains the default.
     homeCardColumns: null, // null preserves the existing Big/Small column count.
     background: "aurora",
@@ -66,9 +75,23 @@ AeroTizen.config = {
     timeFormat: null, // Detect 12/24-hour format when first loaded.
     continueWatching: false,
     continueWatchingApps: [],
+    // App locks and the TV lock. The passcode is kept only as a salted hash.
+    lockedApps: [],
+    lockOnPowerOn: false,
+    passcodeHash: "",
+    passcodeSalt: "",
     showLiveTv: true,
     hideDisconnectedHdmi: false,
     hdmiKeepVisible: {}, // Optional per-port exception for an unidentified device.
     inputNames: {},
+  },
+
+  // Applied once on a TV with no saved settings; saved installs keep their chosen look.
+  MACOS_FRESH_INSTALL: {
+    macosLook: true,
+    glassSettings: true,
+    background: "photos",
+    hideDisconnectedHdmi: true,
+    greetingName: "",
   },
 };

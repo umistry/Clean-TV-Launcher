@@ -34,7 +34,7 @@ export const SettingsDrawer = ({ panes }: { panes: Record<Category, ComponentChi
           <div class="settings-drawer__kicker">
             {
               // eslint-disable-next-line launcher-i18n/translated-copy -- Product name.
-              "AEROTIZEN"
+              "TIZENOS MACOS LAUNCHER"
             }
           </div>
           <h2>{t("common.settings")}</h2>

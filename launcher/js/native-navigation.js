@@ -46,6 +46,9 @@
   function leaveBeforeLaunch(onReady, onFailure) {
     var xhr,
       settled = false;
+    if (A.homewatch.announceHandoff) {
+      A.homewatch.announceHandoff();
+    }
     function fail(reason, detail) {
       if (settled) {
         return;

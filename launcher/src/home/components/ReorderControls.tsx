@@ -10,16 +10,18 @@ const DIRECTION_ICONS = [
   { direction: "down", icon: ChevronDown },
 ] as const;
 export const ReorderControls = ({ env, id }: { env: HomeEnvironment; id: string }) => {
-  const { draft } = useStore(env.state);
+  const { draft, page } = useStore(env.state);
   const settings = useStore(env.settings);
   const ids = draft || settings.home;
   const index = ids.indexOf(id);
   const columns = env.columns(settings);
+  // The Dock is a single row, so apps only move sideways there.
+  const twoAxes = !settings.macosLook || page !== "home";
   const allowed = {
     left: index > 0,
     right: index < ids.length - 1,
-    up: index >= columns,
-    down: index + columns < ids.length,
+    up: twoAxes && index >= columns,
+    down: twoAxes && index + columns < ids.length,
   };
   return (
     <>

@@ -420,6 +420,56 @@ window.AeroTizen.catalog = {
       "legacy": {
         "artworkNames": ["samsung tv plus"]
       }
+    },
+    {
+      "key": "jiohotstar",
+      "name": "JioHotstar",
+      "variants": [
+        {
+          "appId": "fiZNCxMH9Y.Hotstar",
+          "storeId": "3201711015117"
+        }
+      ]
+    },
+    {
+      "key": "sonyliv",
+      "name": "SonyLIV",
+      "variants": [
+        {
+          "appId": "EUKHUxrGQA.SonyLIV",
+          "storeId": "3201709014748"
+        }
+      ]
+    },
+    {
+      "key": "zee5",
+      "name": "ZEE5",
+      "variants": [
+        {
+          "appId": "wKDM33Rods.ZEE5",
+          "storeId": "3201810017104"
+        }
+      ]
+    },
+    {
+      "key": "amazon-alexa",
+      "name": "Amazon Alexa",
+      "variants": [
+        {
+          "appId": "AQKO41xyKP.AmazonAlexa",
+          "storeId": "3202004020626"
+        }
+      ]
+    },
+    {
+      "key": "samsung-workspace",
+      "name": "Workspace",
+      "variants": [
+        {
+          "appId": "WSRedi0001.WorkspaceRedi",
+          "storeId": "6261015084701"
+        }
+      ]
     }
   ]
 };

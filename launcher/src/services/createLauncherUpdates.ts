@@ -1,7 +1,7 @@
 import type { LauncherUpdateNotice, LauncherUpdateSnapshot } from "../contracts/updates";
 import { createStore } from "../shared/state/createStore";
 
-const RELEASES = "https://api.github.com/repos/helalaou/AeroTizen/releases?per_page=100";
+const RELEASES = "https://api.github.com/repos/umistry/Clean-TV-Launcher/releases?per_page=100";
 const CACHE_KEY = "aerotizen.launcherUpdate.check";
 const ACKNOWLEDGEMENT_KEY = "aerotizen.launcherUpdate.acknowledgement";
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;

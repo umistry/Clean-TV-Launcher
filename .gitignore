@@ -26,3 +26,4 @@ tests/native-untethered/bin/
 tests/native-untethered/obj/
 tests/native-boot-probe/bin/
 tests/native-boot-probe/obj/
+wallpaper-sources/

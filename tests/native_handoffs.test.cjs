@@ -105,6 +105,7 @@ function harness(options = {}) {
       documentListeners[name] = handler;
     },
     hidden: options.visible === true ? false : true,
+    hasFocus: () => options.visible === true,
     body: { classList: { add() {}, remove() {} } },
     documentElement: { style: {} },
   };
@@ -120,6 +121,7 @@ function harness(options = {}) {
       DEFAULT_HOME_APPS: [],
       FIREPLACE_ID: "__fire",
       STORE_APP_IDS: options.storeIds || [],
+      EXTERNAL_OPEN_GRACE_MS: 4000,
     },
     homewatch: {
       watch(id) {
@@ -211,12 +213,26 @@ test("double HTTP callbacks never launch YouTube more than once", () => {
   assert.equal(h.launches.length, 1);
 });
 
-test("denied YouTube launch rearms HomeWatcher", () => {
+const waitOutYouTube = (h) => h.timers.filter((timer) => timer.ms === 4000).forEach((timer) => timer.fn());
+
+test("denied YouTube launch rearms HomeWatcher once the launcher is clearly still in front", () => {
+  const h = harness({ launchFails: "youtube.app", visible: true });
+  h.A.apps.launch({ id: "youtube.app", name: "YouTube" });
+  h.requests[0].resolve(200);
+  assert.equal(h.requests.length, 1, "nothing is decided while YouTube may still be opening");
+  waitOutYouTube(h);
+  assert.equal(h.requests[1].url, "http://127.0.0.1:47790/home");
+  assert.match(h.toasts[0], /Could not open YouTube/);
+});
+
+test("YouTube reporting an error while taking the screen stays open", () => {
   const h = harness({ launchFails: "youtube.app" });
   h.A.apps.launch({ id: "youtube.app", name: "YouTube" });
   h.requests[0].resolve(200);
-  assert.equal(h.requests[1].url, "http://127.0.0.1:47790/home");
-  assert.match(h.toasts[0], /Could not open YouTube/);
+  waitOutYouTube(h);
+  assert.equal(h.requests.length, 1, "the watcher must stay paused, or it takes the screen back from YouTube");
+  assert.equal(h.toasts.length, 0);
+  assert.equal(h.log.snapshot().records.at(-1).event, "app.launch_accepted");
 });
 
 test("regular apps still use the original /watch launch sequence", () => {
@@ -347,9 +363,10 @@ test("launch outcomes correlate with requests and preserve failure handoffs", ()
     ["app.launch_requested", "app.launch_accepted"],
   );
   assert.equal(records[1].data.operation_id, records[0].id);
-  const failed = harness({ launchFails: "youtube.app" });
+  const failed = harness({ launchFails: "youtube.app", visible: true });
   failed.A.apps.launch({ id: "youtube.app", name: "YouTube" });
   failed.requests[0].resolve(200);
+  waitOutYouTube(failed);
   // Deferred error processing must not prevent /home rearm.
   assert.equal(failed.requests[1].url, "http://127.0.0.1:47790/home");
   failed.timers.filter((timer) => timer.ms === 0).forEach((timer) => timer.fn());

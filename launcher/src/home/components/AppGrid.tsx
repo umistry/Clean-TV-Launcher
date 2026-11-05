@@ -14,6 +14,7 @@ export const AppGrid = ({
   shown,
   active,
   label,
+  checkedIds,
 }: {
   env: HomeEnvironment;
   ids: readonly string[];
@@ -23,6 +24,7 @@ export const AppGrid = ({
   shown: boolean;
   active: boolean;
   label: string;
+  checkedIds?: readonly string[];
 }) => {
   const size = settings.cardSize === "small" ? "small" : "big";
   return (
@@ -38,7 +40,7 @@ export const AppGrid = ({
           return <FireplaceCard key={id} env={env} registered={shown} />;
         }
         const app = apps.find((app) => app.id === id) || { id, name: id, icon: "" };
-        return <AppCard key={id} env={env} app={app} active={active && shown} />;
+        return <AppCard key={id} env={env} app={app} active={active && shown} checked={checkedIds?.includes(id)} />;
       })}
     </div>
   );

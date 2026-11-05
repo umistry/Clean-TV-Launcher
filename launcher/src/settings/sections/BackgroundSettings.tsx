@@ -46,7 +46,8 @@ export const BackgroundSettings = ({ settings, actions, config, backgrounds: lis
   const { t } = useTranslation();
   const selected = list.find((background) => background.id === settings.background);
   const unavailable = webGL === false && selected?.requiresWebGL === true;
-  const animated = Boolean(selected?.anim) && !unavailable;
+  // Rotating photos change when the launcher returns, so they have no speed to adjust.
+  const animated = Boolean(selected?.anim) && selected?.anim !== "photos" && !unavailable;
   const percent = ((settings.speed - config.SPEED.MIN) / (config.SPEED.MAX - config.SPEED.MIN)) * 100;
   const { view, drawer, navigation, services } = useSettingsEnvironment();
   const { category, expanded } = useStore(drawer);

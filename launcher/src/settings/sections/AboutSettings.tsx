@@ -5,8 +5,9 @@ import { useTranslation } from "../../shared/i18n/useTranslation";
 import { SettingsSection } from "../components/SettingsSection";
 import { useSettingsEnvironment } from "../hooks/useSettingsEnvironment";
 
-const updateCommand = "aerotizen update launcher";
-const projectUrl = "github.com/helalaou/AeroTizen";
+// "aerotizen update launcher" would install upstream AeroTizen over this build, so updates install the release folder.
+const updateCommand = "aerotizen install ./tizenos-macos-launcher";
+const projectUrl = "github.com/umistry/Clean-TV-Launcher";
 
 export const AboutSettings = ({ active }: { active: boolean }) => {
   const { updates, drawer } = useSettingsEnvironment();

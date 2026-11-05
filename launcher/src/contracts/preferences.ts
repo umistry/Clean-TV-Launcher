@@ -20,6 +20,8 @@ export interface SettingsValues {
   continueWatchingApps: string[];
   dateFormat: DateFormat | "auto" | "weekday" | "dmy" | "mdy";
   glassSettings: boolean;
+  greetingEnabled: boolean;
+  greetingName: string;
   hdmiKeepVisible: Record<string, boolean>;
   hideDisconnectedHdmi: boolean;
   home: string[];
@@ -27,7 +29,12 @@ export interface SettingsValues {
   homeCardMode: "square" | "rectangle";
   inputNames: Record<string, string>;
   language: string;
+  lockedApps: string[];
+  lockOnPowerOn: boolean;
+  macosLook: boolean;
   numerals: "latn" | "arab";
+  passcodeHash: string;
+  passcodeSalt: string;
   showLiveTv: boolean;
   showNetwork: boolean;
   showTime: boolean;
@@ -40,9 +47,13 @@ export interface SettingsValues {
   weatherShowLocation: boolean;
 }
 export type SettingsSnapshot = Readonly<
-  Omit<SettingsValues, "home" | "inputNames" | "weatherLocation" | "continueWatchingApps" | "hdmiKeepVisible">
+  Omit<
+    SettingsValues,
+    "home" | "inputNames" | "weatherLocation" | "continueWatchingApps" | "hdmiKeepVisible" | "lockedApps"
+  >
 > & {
   readonly home: readonly string[];
+  readonly lockedApps: readonly string[];
   readonly homeInitialized: boolean;
   readonly continueWatchingApps: readonly string[];
   readonly hdmiKeepVisible: Readonly<Record<string, boolean>>;

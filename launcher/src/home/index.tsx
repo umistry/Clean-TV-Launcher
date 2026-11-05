@@ -9,8 +9,13 @@ import type { Translations } from "../shared/i18n/createTranslations";
 import { TranslationContext } from "../shared/i18n/useTranslation";
 
 import { Home } from "./Home";
+import { createLocks } from "./macos/createLocks";
+import { createMoments } from "./macos/createMoments";
+import { createSystemStats } from "./macos/createSystemStats";
 import { createHomeController } from "./state/createHomeController";
 import { createHomeInventory } from "./state/createHomeInventory";
+
+const LAUNCHPAD_COLUMNS = 7;
 
 export const mountHome = (
   runtime: LauncherRuntime,
@@ -24,15 +29,26 @@ export const mountHome = (
   // Apply shell mode before any Home focus geometry is measured.
   const syncShell = () => {
     const values = settings.getSnapshot();
-    document.body.classList.toggle("glass-ui", values.glassSettings);
+    document.body.classList.toggle("glass-ui", values.glassSettings || values.macosLook);
+    document.body.classList.toggle("macos-ui", values.macosLook);
     document.body.classList.toggle("clock-layout-compact", values.clockLayout !== "custom");
   };
   syncShell();
   const unsubscribeShell = settings.subscribe(syncShell);
   const inventory = createHomeInventory(runtime, settings, flushSync);
   const rows = createRef<HTMLElement>();
+  const moments = createMoments();
+  const stats = createSystemStats(runtime);
+  const locks = createLocks({
+    runtime,
+    settings,
+    translate: (key, values) => translations.getSnapshot().t(key, values),
+  });
   const environment = createHomeController(
     {
+      locks,
+      moments,
+      stats,
       runtime,
       settings,
       inventory,
@@ -44,24 +60,32 @@ export const mountHome = (
       nodes: new Map(),
       showMoveInstructions: () => runtime.toast(translations.getSnapshot().t("home.moveInstructions")),
       describe: (app) => runtime.tiles.describe(app),
-      columns: (values) =>
-        [3, 4, 5].includes(Number(values.homeCardColumns))
+      columns: (values) => {
+        if (values.macosLook) {
+          return LAUNCHPAD_COLUMNS;
+        }
+        return [3, 4, 5].includes(Number(values.homeCardColumns))
           ? Number(values.homeCardColumns)
-          : runtime.config.CARD_COLUMNS[values.cardSize === "small" ? "small" : "big"],
+          : runtime.config.CARD_COLUMNS[values.cardSize === "small" ? "small" : "big"];
+      },
     },
     flushSync,
   );
   const refresh = () => {
+    locks.boot();
     inventory.refresh();
     environment.bridge.focus();
   };
   const bridge = { ...environment.bridge, render: refresh, buildRows: refresh, refreshApps: refresh };
   const dispose = () => {
     environment.bridge.blur();
+    locks.dispose();
+    moments.dispose();
+    stats.dispose();
     render(null, mount);
     inventory.dispose();
     unsubscribeShell();
-    document.body.classList.remove("glass-ui", "clock-layout-compact");
+    document.body.classList.remove("glass-ui", "macos-ui", "clock-layout-compact");
   };
   try {
     render(

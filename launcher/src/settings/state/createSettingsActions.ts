@@ -15,7 +15,8 @@ export const createSettingsActions = (
       settings.refresh();
     });
   return {
-    setGlassSettings: (glassSettings) => commit({ glassSettings }),
+    setAppearance: (appearance) =>
+      commit({ macosLook: appearance === "macos", glassSettings: appearance !== false }, services.applyCardSize),
     setWeatherPhoto: (weatherPhoto) =>
       commit({ weatherPhoto }, () => {
         services.applyWeatherVisibility();
@@ -28,6 +29,8 @@ export const createSettingsActions = (
         continueWatchingApps: selected.includes(id) ? selected.filter((app) => app !== id) : [...selected, id],
       });
     },
+    setGreetingEnabled: (greetingEnabled) => commit({ greetingEnabled }),
+    setGreetingName: (greetingName) => commit({ greetingName }),
     setBackground(background) {
       const wasPhoto = settings.getSnapshot().weatherPhoto;
       commit({ background, weatherPhoto: false }, () => {

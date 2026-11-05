@@ -73,7 +73,7 @@ for (const scenario of [
       };
     });
     await page.goto("/");
-    await expect(page).toHaveTitle("AeroTizen");
+    await expect(page).toHaveTitle("TizenOS macOS Launcher");
     const cards = page.locator(".continue-card"),
       apps = page.locator("#grid > .tile");
     await expect(cards).toHaveCount(10);

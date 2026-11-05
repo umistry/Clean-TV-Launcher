@@ -63,12 +63,14 @@ export interface SettingsActions {
   openStore(): void;
   preview(): void;
   saveInputName(port: string, value: string): void;
+  setAppearance(appearance: "macos" | boolean): void;
   setBackground(background: string): void;
   setCardSize(size: CardSize): void;
   setClockLayout(layout: "classic" | SettingsValues["aeroClockStyle"]): void;
   setContinueWatching(enabled: boolean): void;
   setDateFormat(format: DateFormat): void;
-  setGlassSettings(enabled: boolean): void;
+  setGreetingEnabled(enabled: boolean): void;
+  setGreetingName(name: string): void;
   setHdmiKeepVisible(port: string, keep: boolean): void;
   setHdmiVisibility(hide: boolean): void;
   setHomeCardColumns(columns: number | null): void;
